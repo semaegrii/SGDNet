@@ -1,19 +1,20 @@
 from __future__ import division
 import cv2,keras
-from keras.optimizers import RMSprop,Adam
+from keras.optimizers import adam_v2, Adam
 from keras.callbacks import EarlyStopping, ModelCheckpoint, LearningRateScheduler, TensorBoard, ReduceLROnPlateau
-from keras.layers import Input
+from keras.layers import InputLayer
 from keras.models import Model
 import sys,os
 import numpy as np
-
-from utilitiestrain import preprocess_imagesandsaliencyforiqa,preprocess_label
+from utilitiestrain import preprocess_imagesandsaliencyforiqa, preprocess_label
 import time
 
 from modelfinal import TVdist,SGDNet
 import keras.backend as K
 import tensorflow as tf
+import pickle
 import h5py, yaml
+from yaml import Loader
 import math
 from argparse import ArgumentParser
 
@@ -27,15 +28,21 @@ from argparse import ArgumentParser
 #               metrics=['accuracy', mean_pred])
 from scipy import stats
 def evaluationmetrics(_y,_y_pred):
-        sq = np.reshape(np.asarray(_y), (-1,))
-        q = np.reshape(np.asarray(_y_pred), (-1,))
 
-        srocc = stats.spearmanr(q, sq)[0]   #srocc is not always accurate. It need using matlab code to compute.
-        krocc = stats.stats.kendalltau(sq, q)[0]
-        plcc = stats.pearsonr(sq, q)[0]
-        rmse = np.sqrt(((sq - q) ** 2).mean())
-        mae = np.abs((sq - q)).mean()
-        return srocc, krocc, plcc, rmse, mae
+    sq = np.reshape(np.asarray(_y), (-1,))
+    q = np.reshape(np.asarray(_y_pred), (-1,))
+    # print(sq.shape)
+    # print(q.shape)
+
+    srocc = stats.spearmanr(q, sq)[0]   #srocc is not always accurate. It need using matlab code to compute.
+    krocc = stats.kendalltau(sq, q)[0]
+    plcc = stats.pearsonr(sq, q)[0]
+
+    rmse = np.sqrt(((sq - q) ** 2).mean())
+    mae = np.abs((sq - q)).mean()
+
+
+    return srocc, krocc,plcc,rmse, mae
 #
 
 def ensure_dir(path):
@@ -78,14 +85,14 @@ def datasetgenerator(conf,log_dir,EXP_ID ='0', mostype = 'ss'):
     if len(test_index)>0:
         ensure_dir(log_dir)
         testTfile = log_dir+ EXP_ID +'.txt'
-        outfile = open(testTfile, "w")
+        outfile = open(testTfile, "rb")
 
         if mostype == 'DMOS':
-            print >> outfile, "\n".join(str(Info['DMOS'][0, i])  for i in test_index )
+            print (outfile, "\n".join(str(Info['DMOS'][0, i])  for i in test_index ))
         elif mostype == 'NMOS':
-            print >> outfile, "\n".join(str(Info['NMOS'][0, i])  for i in test_index )
+            print (outfile, "\n".join(str(Info['NMOS'][0, i])  for i in test_index ))
         else:
-            print >> outfile, "\n".join(str(Info['subjective_scores'][0, i])  for i in test_index )            
+            print(outfile, "\n".join(str(Info['subjective_scores'][0, i])  for i in test_index ))            
         outfile.close() 
     return  train_index,val_index,test_index  
     
@@ -157,7 +164,7 @@ class DataGenerator(keras.utils.Sequence):
         else:
             mos = Info['subjective_scores'][0, index]
 
-        im_names = [Info[Info['image_name'][0, :][i]].value.tobytes()\
+        im_names = [Info[Info['image_name'][0, :][i]][()].tobytes()\
                                 [::2].decode() for i in index]
         # print len(im_names)
         # print self.batch_size
@@ -174,18 +181,18 @@ class DataGenerator(keras.utils.Sequence):
 if __name__ == '__main__':
     # phase = sys.argv[1]
     parser = ArgumentParser(description='PyTorch saliency guided CNNIQA')
-    parser.add_argument('--batch_size', type=int, default=15,
+    parser.add_argument('--batch_size', type=int, default=19,
                         help='input batch size for training (default: 15)')
     parser.add_argument('--epochs', type=int, default=300,
                         help='number of epochs to train (default: 300)')
     parser.add_argument('--lr', type=float, default=1e-4,
                         help='learning rate (default: 0.0001)')
-    parser.add_argument('--config', default='config.yaml', type=str,
+    parser.add_argument('--config', default='/home/user/Desktop/SGDNet/acmmm_release/config.yaml', type=str,
                         help='config file path (default: config.yaml)')
     parser.add_argument('--exp_id', default='0', type=str,
                         help='exp id (default: 1)')
-    parser.add_argument('--database', default='LIVEc', type=str,
-                        help='database name (default: LIVEc)')
+    parser.add_argument('--database', default='Koniq10k', type=str,
+                        help='database name (default: Koniq10k)')
     parser.add_argument('--phase', default='train', type=str,
                         help='phase (default: train')
     parser.add_argument('--pretrained', action='store_true',
@@ -208,7 +215,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.config) as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader)
     print('phase: ' + args.phase)
     print('exp id: ' + args.exp_id)
     print('database: ' + args.database)
@@ -220,7 +227,7 @@ if __name__ == '__main__':
     print('batch_size: ' + str(args.batch_size))
     config.update(config[args.database])
 
-    log_dir = './data' + '/EXP{}-{}-testtxt/'.format(args.exp_id, args.database)
+    log_dir = '/home/user/Desktop/SGDNet/acmmm_release/data' + '/EXP{}-{}-test.txt/'.format(args.exp_id, args.database)
 
     b_s= args.batch_size
     crop_h =  config['shape_r']  
@@ -243,16 +250,17 @@ if __name__ == '__main__':
     if args.phase == 'train':    
         if args.pretrained == True:
             print("Load weights SGDNet")
-            weight_file = '../checkpoint/'+ 'saliencyoutput-alpha0.25-ss-Koniq10k-1024-EXP0-lr=0.0001-bs=19.33-0.1721-0.0817-0.1637-0.2054.pkl'
-            model.load_weights(weight_file)  
+            weight_file = '/home/user/Desktop/SGDNet/checkpoint/'+ 'saliencyoutput-alpha0.25-ss-Koniq10k-1024-EXP0-lr=0.0001-bs=19.33-0.1721-0.0817-0.1637-0.2054.pkl'
+            # model.load_weights(weight_file)  
+            pickle.dump(model, open(weight_file, 'wb'))         
             print (weight_file)
-
+            
         nb_imgs_train =  len(train_index) 
         nb_imgs_val =  len(val_index) 
         print (nb_imgs_train,nb_imgs_val)
         print("Training SGDNet")
-        ensure_dir('../checkpoint/')
-        checkpointdir= '../checkpoint/'+ 'saliency{}-alpha{}-{}-{}-{}-EXP{}-lr={}-bs={}'.format(args.saliency,str(args.alpha),args.mostype,args.database,str(args.out2dim),args.exp_id,str(args.lr),str(args.batch_size))
+        ensure_dir('/home/user/Desktop/SGDNet/checkpoint/')
+        checkpointdir= '/home/user/Desktop/SGDNet/checkpoint/'+ 'saliency{}-alpha{}-{}-{}-{}-EXP{}-lr={}-bs={}'.format(args.saliency,str(args.alpha),args.mostype,args.database,str(args.out2dim),args.exp_id,str(args.lr),str(args.batch_size))
         print (checkpointdir)
         reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, min_lr=1e-7,verbose=1)
 
@@ -275,8 +283,8 @@ if __name__ == '__main__':
         # path of output folder
         arg = 'saliencyoutput-alpha0.25-ss-Koniq10k-1024-EXP0-lr=0.0001-bs=19.33-0.1721-0.0817-0.1637-0.2054.pkl'
         print("Load weights SGDNet")
-        weight_file = '../checkpoint/'+ arg
-        model.load_weights(weight_file)         
+        weight_file = '/home/user/Desktop/SGDNet/checkpoint/'+ arg
+        pickle.dump(model, open(weight_file, 'wb'))         
 
         output_folder = 'TestResults/'+arg+ args.database+ '/'
         if os.path.isdir(output_folder) is False:
@@ -309,13 +317,14 @@ if __name__ == '__main__':
             for pred in predictions0:
                 results.append(float(pred))
 
-            outfile = open(output_folderfile, "w")
-            print >> outfile, "\n".join(str(i) for i in results)
+            outfile = pickle.load(model, open(output_folderfile, 'rb'))
+            # outfile = open(output_folderfile, 'w')
+            print ( outfile, "\n".join(str(i) for i in results))
             outfile.close()
             totalrsults=[sum(x) for x in zip(results, totalrsults)]
         totalrsults=[x/repeat for x in totalrsults]
-        outfile = open(output_folderfileavg, "w")
-        print >> outfile, "\n".join(str(i) for i in totalrsults)
+        outfile = open(output_folderfileavg, "rb")
+        print (outfile, "\n".join(str(i) for i in totalrsults))
         outfile.close()
         
         elapsed_time = time.time() - start_time0   
@@ -333,8 +342,8 @@ if __name__ == '__main__':
         maps = [float(x.strip()) for x in content] 
         f.close()        
 
-        srocc, krocc, plcc, rmse, mae = evaluationmetrics(maps,maps2)
-        print("Testing Results  :SROCC: {:.4f} KROCC: {:.4f} PLCC: {:.4f} RMSE: {:.4f} MAE: {:.4f} "
+        srocc, krocc,plcc, rmse, mae = evaluationmetrics(maps,maps2)
+        print("Testing Results  :SROCC: {:.4f} KROCC: {:.4f} PLCC:{:.4f} RMSE: {:.4f} MAE: {:.4f} "
                   .format(srocc, krocc, plcc, rmse, mae))
 
     else:

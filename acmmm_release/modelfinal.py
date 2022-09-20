@@ -2,11 +2,11 @@ from __future__ import division
 from keras import layers
 from keras.models import Model
 from keras.layers import Lambda,Conv2D,LSTM, Concatenate,GlobalMaxPooling2D,GlobalAveragePooling2D
-
 from keras.layers.core import Dropout, Activation,Dense,Reshape,Flatten
-from keras.layers import Input, merge,Add,multiply, Permute
-from keras.layers.convolutional import Convolution2D, MaxPooling2D,UpSampling2D ,Deconvolution2D,ZeroPadding2D,AveragePooling2D
-from keras.layers.normalization import BatchNormalization
+from keras.layers import InputLayer, Add, Multiply, Permute, Input, multiply
+from keras.layers.convolutional import Convolution2D, MaxPooling2D,UpSampling2D,ZeroPadding2D,AveragePooling2D
+from keras.layers.normalization.batch_normalization import BatchNormalization
+
 #from keras.layers import Conv2D, Concatenate, MaxPooling2D
 #from keras.layers.convolutional import AtrousConvolution2D
 from keras.utils.data_utils import get_file
@@ -27,7 +27,7 @@ import tensorflow as tf
 import numpy as np
 from keras import applications
 
-TF_WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/releases/download/v0.1/vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5'
+TF_WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/releases/download/v0.1/vgg16_weights_source .venv/bin/activatetf_dim_ordering_tf_kernels_notop.h5'
 WEIGHTS_PATH_NO_TOP2 = ('https://github.com/fchollet/deep-learning-models/'
                        'releases/download/v0.2/'
                        'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5')
@@ -150,7 +150,7 @@ def kerasResnet(input_tensor=None, train_bn=None):
         img_input = Input(shape=input_shape)
     else:
         if not K.is_keras_tensor(input_tensor):
-            img_input = Input(tensor=input_tensor)
+            img_input = InputLayer(tensor=input_tensor)
         else:
             img_input = input_tensor
     bn_axis= -1
@@ -198,10 +198,10 @@ def M_VGG16(input_tensor=None):
     input_shape = (None, None,3)
 
     if input_tensor is None:
-        img_input = Input(shape=input_shape)
+        img_input = InputLayer(shape=input_shape)
     else:
         if not K.is_keras_tensor(input_tensor):
-            img_input = Input(tensor=input_tensor)
+            img_input = InputLayer(tensor=input_tensor)
         else:
             img_input = input_tensor
 
